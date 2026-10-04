@@ -10,5 +10,5 @@ pub struct Display {
 }
 
 #[allow(unused)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DisplayId(pub String);

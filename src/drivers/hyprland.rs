@@ -1,16 +1,14 @@
-use std::{
-    env,
-    io::{BufRead, BufReader},
-    os::unix::net::UnixStream,
-    sync::mpsc::Sender,
-    thread,
-};
+use std::env;
+
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 use serde::Deserialize;
+use tokio::{net::UnixStream, sync::mpsc::Sender};
 
 use crate::{
     display::{Display, DisplayId},
-    platform::{Driver, PlatformDriver, PlatformEvent},
+    drivers::evdev::evdev_mouse_reader,
+    platform::{PlatformDriver, PlatformEvent},
 };
 
 #[derive(Debug)]
@@ -43,28 +41,67 @@ impl PlatformDriver for HyprlandDriver {
         }
     }
 
-    fn start(&self, _sender: Sender<PlatformEvent>) -> Result<Driver, String> {
-        let runtime_dir = env::var("XDG_RUNTIME_DIR").unwrap();
-        let instance = env::var("HYPRLAND_INSTANCE_SIGNATURE").unwrap();
-        let path = format!("{runtime_dir}/hypr/{instance}/.socket2.sock");
-        let stream = UnixStream::connect(path).unwrap();
-        let shutdown_stream = stream.try_clone().unwrap();
+    fn start(
+        &self,
+        shutdown: &tokio::sync::broadcast::Sender<()>,
+        sender: Sender<PlatformEvent>,
+    ) -> tokio::task::JoinHandle<Result<(), String>> {
+        println!("starting hyprland driver");
 
-        let handle: thread::JoinHandle<Result<(), String>> = thread::spawn(move || {
-            let reader = BufReader::new(stream);
+        let mut driver_shutdown = shutdown.subscribe();
 
-            for line in reader.lines() {
-                let line = line.map_err(|s| format!("{s}"))?;
-                println!("{line}");
+        let evdev_shutdown = shutdown.subscribe();
+
+        tokio::spawn(async move {
+            let runtime_dir = env::var("XDG_RUNTIME_DIR").map_err(|e| e.to_string())?;
+            let instance = env::var("HYPRLAND_INSTANCE_SIGNATURE").map_err(|e| e.to_string())?;
+            let path = format!("{runtime_dir}/hypr/{instance}/.socket2.sock");
+            let stream = UnixStream::connect(path).await.map_err(|e| {
+                println!("{e}");
+                e.to_string()
+            })?;
+
+            let mut reader = BufReader::new(stream);
+            let mut line = String::new();
+
+            let Some(mut evdev_reader) = evdev_mouse_reader(evdev_shutdown) else {
+                return Err("Could not find mouse!".to_string());
+            };
+
+            loop {
+                tokio::select! {
+                    result = evdev_reader.recv() => {
+                        match result {
+                            Some(Some(event)) => {
+                                let _ = sender.send(event).await;
+                            }
+                            Some(None) => { }
+                            None => break
+                        }
+                    }
+
+                    result = reader.read_line(&mut line) => {
+                        let n = result.map_err(|e| e.to_string())?;
+
+                        if n == 0 {
+                            break;
+                        }
+
+                        if let Some(event) = parse_event(line.trim()){
+                            let _ = sender.send(event).await;
+                        }
+
+                        line.clear();
+                    }
+
+                    _ = driver_shutdown.recv() => {
+                        break;
+                    }
+                }
             }
 
             Ok(())
-        });
-
-        Ok(Driver::new(Box::new(move || {
-            shutdown_stream.shutdown(std::net::Shutdown::Both).unwrap();
-            handle.join().unwrap().unwrap();
-        })))
+        })
     }
 }
 
@@ -88,5 +125,23 @@ impl From<Monitor> for Display {
             y: val.y,
             scale: val.scale,
         }
+    }
+}
+
+fn parse_event(input: &str) -> Option<PlatformEvent> {
+    let (name, data) = input.split_once(">>")?;
+    let mut parts = data.splitn(3, ':');
+    let namespace = parts.next()?;
+    let command = parts.next()?;
+    let payload = parts.next()?;
+    match (name, namespace, command) {
+        ("custom", "hg", "cur") => {
+            let (x, y) = payload.split_once(',')?;
+            Some(PlatformEvent::Move {
+                x: x.parse().ok()?,
+                y: y.parse().ok()?,
+            })
+        }
+        _ => None,
     }
 }

@@ -1,62 +1,36 @@
-use std::{sync::mpsc, thread};
-
-use signal_hook::{consts::{SIGINT, SIGTERM}, iterator::Signals};
-
-use crate::{
-    display_manager::DisplayManager,
-    platform::{PlatformEvent, get_platform},
-};
+use crate::{args::Args, host::start_host};
 
 mod app;
 mod args;
 mod display;
 mod display_manager;
 mod drivers;
+mod host;
 mod platform;
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), String> {
     print!("\x1B[2J\x1B[H");
 
-    let Some(driver) = get_platform() else {
-        println!("Could not resolve driver for current platform!");
-        return;
+   
+
+    let args = Args::new();
+
+    let port_str = args.get_arg("port").map_or("5000", |v| v);
+
+    let Ok(port) = port_str.parse::<u32>() else {
+        return Err(format!("Invalid port {port_str}!"));
     };
 
-    let mut _dm = DisplayManager::new(&*driver);
+    if args.has_command("connect") {
+        // let Some(host) = args.get_arg("host") else {
+        //     return Err(Error::new(std::io::ErrorKind::InvalidData, "Missing hostname!"));
+        // };
 
-    let (sender, receiver) = mpsc::channel::<PlatformEvent>();
-
-    let driver = match driver.start(sender.clone()) {
-        Err(err) => return println!("{err}"),
-        Ok(d) => d
-    };
-
-
-    let cli_sender = sender.clone();
-
-    let cli_handle = thread::spawn(move || {
-        let mut signals = Signals::new([SIGINT, SIGTERM]).map_err(|e| format!("{e}")).unwrap();
-        
-        for signal in signals.forever() {
-            match signal {
-                SIGINT | SIGTERM => {
-                    let _ = cli_sender.send(PlatformEvent::Shutdown);
-                    return;
-                }
-                _ => {}
-            }
-        }
-    });
-
-    for event in receiver {
-        match event {
-            PlatformEvent::Shutdown => {
-                println!("Shutting down...");
-                driver.stop();
-                cli_handle.join().unwrap();
-                return;
-            },
-            _ => println!("{event:#?}")
-        }
+        // Client::connect(port, host)?;
+    } else {
+        start_host(port).await?;
     }
+
+    Ok(())
 }
