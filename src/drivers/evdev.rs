@@ -1,12 +1,12 @@
-
 use evdev::{Device, InputEvent, enumerate};
 use tokio::{
     io::unix::AsyncFd,
     sync::{
         broadcast::Receiver,
-        mpsc::{UnboundedReceiver, unbounded_channel},
+        mpsc::Sender,
     },
 };
+use std::os::fd::{AsRawFd, BorrowedFd};
 
 use crate::platform::PlatformEvent;
 
@@ -29,20 +29,16 @@ pub fn get_mouse() -> Option<Device> {
 }
 
 
-use std::os::fd::{AsRawFd, BorrowedFd};
-
-
 pub fn evdev_mouse_reader(
     mut shutdown: Receiver<()>,
-) -> Option<UnboundedReceiver<Option<PlatformEvent>>> {
-    let mut device = get_mouse()?;
+    sender: Sender<PlatformEvent>,
+) -> tokio::task::JoinHandle<()> {
+    let mut device = get_mouse().unwrap();
 
-    device.set_nonblocking(true).ok()?;
+    device.set_nonblocking(true).unwrap();
 
     let fd = unsafe { BorrowedFd::borrow_raw(device.as_raw_fd()) };
-    let async_fd = AsyncFd::new(fd).ok()?;
-
-    let (tx, rx) = unbounded_channel();
+    let async_fd = AsyncFd::new(fd).unwrap();
 
     tokio::spawn(async move {
         loop {
@@ -56,14 +52,12 @@ pub fn evdev_mouse_reader(
                         }
                     };
 
+                    let mut events = Vec::new();
+
                     loop {
                         match device.fetch_events() {
-                            Ok(events) => {
-                                for event in events {
-                                    if tx.send(parse_event(event)).is_err() {
-                                        return;
-                                    }
-                                }
+                            Ok(new_events) => {
+                                events.extend(new_events.map(parse_event));
                             }
 
                             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -78,6 +72,13 @@ pub fn evdev_mouse_reader(
                     }
 
                     guard.clear_ready();
+                    drop(guard);
+
+                    for event in events.into_iter().flatten() {
+                        if sender.send(event).await.is_err() {
+                            return;
+                        }
+                    }
                 }
 
                 _ = shutdown.recv() => {
@@ -85,9 +86,7 @@ pub fn evdev_mouse_reader(
                 }
             }
         }
-    });
-
-    Some(rx)
+    })
 }
 
 fn parse_event(event: InputEvent) -> Option<PlatformEvent> {

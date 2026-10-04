@@ -50,7 +50,7 @@ impl PlatformDriver for HyprlandDriver {
 
         let mut driver_shutdown = shutdown.subscribe();
 
-        let evdev_shutdown = shutdown.subscribe();
+        // let evdev_shutdown = shutdown.subscribe();
 
         tokio::spawn(async move {
             let runtime_dir = env::var("XDG_RUNTIME_DIR").map_err(|e| e.to_string())?;
@@ -64,21 +64,21 @@ impl PlatformDriver for HyprlandDriver {
             let mut reader = BufReader::new(stream);
             let mut line = String::new();
 
-            let Some(mut evdev_reader) = evdev_mouse_reader(evdev_shutdown) else {
-                return Err("Could not find mouse!".to_string());
-            };
+            // let Some(mut evdev_reader) = evdev_mouse_reader(evdev_shutdown) else {
+            //     return Err("Could not find mouse!".to_string());
+            // };
 
             loop {
                 tokio::select! {
-                    result = evdev_reader.recv() => {
-                        match result {
-                            Some(Some(event)) => {
-                                let _ = sender.send(event).await;
-                            }
-                            Some(None) => { }
-                            None => break
-                        }
-                    }
+                    // result = evdev_reader.recv() => {
+                    //     match result {
+                    //         Some(Some(event)) => {
+                    //             let _ = sender.send(event).await;
+                    //         }
+                    //         Some(None) => { }
+                    //         None => break
+                    //     }
+                    // }
 
                     result = reader.read_line(&mut line) => {
                         let n = result.map_err(|e| e.to_string())?;
