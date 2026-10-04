@@ -5,7 +5,7 @@ use tokio::{
     sync::{broadcast::Receiver, mpsc::Sender},
 };
 
-use crate::platform::PlatformEvent;
+use crate::{display_manager::Position, platform::PlatformEvent};
 
 pub fn get_mouse() -> Option<Device> {
     for (_, device) in enumerate() {
@@ -89,10 +89,10 @@ fn parse_event(event: InputEvent) -> Option<PlatformEvent> {
     if event.event_type() == EventType::RELATIVE {
         match event.code() {
             code if code == RelativeAxisCode::REL_X.0 => {
-                return Some(PlatformEvent::Move { x: event.value() as i64, y: 0 })
+                return Some(PlatformEvent::Move(Position(event.value() as i64, 0)))
             }
             code if code == RelativeAxisCode::REL_Y.0 => {
-                return Some(PlatformEvent::Move { x: 0, y: event.value() as i64 })
+                return Some(PlatformEvent::Move(Position(event.value() as i64, 0)))
             }
             _ => {}
         }

@@ -37,12 +37,37 @@ impl DisplayManager {
     pub fn set_physical_position(&mut self, x: i64, y: i64) {
         self.physical_cursor = Position(x, y);
         self.virtual_cursor = Position(x, y);
+
+        println!("phys: {:?}", self.physical_cursor);
     }
 
     pub fn update_virtual_position(&mut self, dx: i64, dy: i64) {
         self.virtual_cursor.add((dx, dy));
 
+        if let Some(v) = self.get_current_display() {
+            if v.display.id != self.current_display {
+                if !v.is_host {
+                    println!("lock host");
+                } else {
+                    println!("unlock host");
+                }
+            }
+            self.current_display = v.display.id.clone();
+        }
 
+        println!("virt: {:?}", self.virtual_cursor);
+    }
+
+    fn get_current_display(&self) -> Option<&VirtualDisplay> {
+        let Position(x,y) = self.virtual_cursor;
+        self.displays.iter().find(|d| {
+            if x < d.display.x { return false; }
+            if x > (d.display.x + d.display.width) { return false; }
+            if y < d.display.y { return false; }
+            if y > (d.display.y + d.display.height) { return false; }
+
+            true
+        })
     }
 }
 

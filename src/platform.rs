@@ -1,6 +1,6 @@
 use tokio::sync::mpsc::Sender;
 
-use crate::{display::Display, drivers::hyprland::HyprlandDriver};
+use crate::{display::Display, display_manager::Position, drivers::hyprland::HyprlandDriver};
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -13,9 +13,9 @@ pub enum MouseButton {
 #[allow(unused)]
 #[derive(Debug)]
 pub enum PlatformEvent {
-    Click { button: MouseButton, x: i64, y: i64 },
-    Position { x: i64, y: i64 },
-    Move { x: i64, y: i64 },
+    Click { button: MouseButton, position: Position },
+    Position(Position),
+    Move(Position),
     Shutdown,
 }
 
@@ -25,8 +25,10 @@ pub trait PlatformDriver: std::fmt::Debug + std::marker::Send {
         &self,
         shutdown: &tokio::sync::broadcast::Sender<()>,
         sender: Sender<PlatformEvent>,
-    ) -> tokio::task::JoinHandle<Result<(), String>>;
+    ) -> Result<tokio::task::JoinHandle<Result<(), String>>, String>;
 }
+
+
 
 #[cfg(target_os = "windows")]
 pub fn get_platform() -> Option<Box<dyn PlatformDriver>> {

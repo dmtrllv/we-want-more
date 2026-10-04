@@ -3,7 +3,9 @@ use std::io::Error;
 use tokio::{net::TcpListener, sync::broadcast};
 
 use crate::{
-    display_manager::DisplayManager, drivers::evdev::evdev_mouse_reader, platform::{PlatformEvent, get_platform},
+    display_manager::{DisplayManager, Position},
+    drivers::evdev::evdev_mouse_reader,
+    platform::{PlatformEvent, get_platform},
 };
 
 pub async fn start_host(port: u32) -> Result<(), String> {
@@ -19,7 +21,7 @@ pub async fn start_host(port: u32) -> Result<(), String> {
 
     let server = tokio::spawn(run_server(port, shutdown.subscribe()));
 
-    let driver = driver.start(&shutdown, event_emitter.clone());
+    let driver = driver.start(&shutdown, event_emitter.clone())?;
 
     let evdev_driver = evdev_mouse_reader(shutdown.subscribe(), event_emitter);
 
@@ -31,10 +33,10 @@ pub async fn start_host(port: u32) -> Result<(), String> {
             }
             event = event_queue.recv() => {
                 match event {
-                    Some(PlatformEvent::Position { x, y }) => {
+                    Some(PlatformEvent::Position(Position(x, y))) => {
                         dm.set_physical_position(x, y);
                     }
-                    Some(PlatformEvent::Move { x, y }) => {
+                    Some(PlatformEvent::Move(Position(x, y))) => {
                         dm.update_virtual_position(x, y);
                     }
                     Some(event) => {

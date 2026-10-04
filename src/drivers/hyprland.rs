@@ -7,6 +7,7 @@ use tokio::{net::UnixStream, sync::mpsc::Sender};
 
 use crate::{
     display::{Display, DisplayId},
+    display_manager::Position,
     platform::{PlatformDriver, PlatformEvent},
 };
 
@@ -16,6 +17,21 @@ pub struct HyprlandDriver {}
 impl HyprlandDriver {
     pub fn new() -> Self {
         Self {}
+    }
+
+    fn get_init_cursor() -> Result<Position, String> {
+        let output = std::process::Command::new("hyprctl")
+            .arg("cursorpos")
+            .output()
+            .map_err(|e| e.to_string())?;
+
+        let position = String::from_utf8(output.stdout).unwrap();
+        println!("{position}");
+        let (x, y) = position.trim().split_once(',').unwrap();
+
+        let x: i64 = x.trim().parse().map_err(|e| format!("{e:?}"))?;
+        let y: i64 = y.trim().parse().map_err(|e| format!("{e:?}"))?;
+        Ok(Position(x, y))
     }
 }
 
@@ -44,12 +60,15 @@ impl PlatformDriver for HyprlandDriver {
         &self,
         shutdown: &tokio::sync::broadcast::Sender<()>,
         sender: Sender<PlatformEvent>,
-    ) -> tokio::task::JoinHandle<Result<(), String>> {
+    ) -> Result<tokio::task::JoinHandle<Result<(), String>>, String> {
         println!("starting hyprland driver");
 
         let mut driver_shutdown = shutdown.subscribe();
 
-        tokio::spawn(async move {
+        let init_pos = Self::get_init_cursor()?;
+            println!("init: {init_pos:?}");
+
+        let task = tokio::spawn(async move {
             let runtime_dir = env::var("XDG_RUNTIME_DIR").map_err(|e| e.to_string())?;
             let instance = env::var("HYPRLAND_INSTANCE_SIGNATURE").map_err(|e| e.to_string())?;
             let path = format!("{runtime_dir}/hypr/{instance}/.socket2.sock");
@@ -62,11 +81,12 @@ impl PlatformDriver for HyprlandDriver {
             let mut line = String::new();
 
 
+            let _ = sender.send(PlatformEvent::Position(init_pos)).await;
+
             loop {
                 tokio::select! {
                     result = reader.read_line(&mut line) => {
                         let n = result.map_err(|e| e.to_string())?;
-
                         if n == 0 {
                             break;
                         }
@@ -85,15 +105,17 @@ impl PlatformDriver for HyprlandDriver {
             }
 
             Ok(())
-        })
+        });
+
+        Ok(task)
     }
 }
 
 #[derive(Deserialize)]
 struct Monitor {
     name: String,
-    width: u64,
-    height: u64,
+    width: i64,
+    height: i64,
     x: i64,
     y: i64,
     scale: f32,
@@ -121,10 +143,10 @@ fn parse_event(input: &str) -> Option<PlatformEvent> {
     match (name, namespace, command) {
         ("custom", "hg", "cur") => {
             let (x, y) = payload.split_once(',')?;
-            Some(PlatformEvent::Move {
-                x: x.parse().ok()?,
-                y: y.parse().ok()?,
-            })
+            Some(PlatformEvent::Position(Position(
+                x.parse().ok()?,
+                y.parse().ok()?,
+            )))
         }
         _ => None,
     }
