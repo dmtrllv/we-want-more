@@ -1,0 +1,61 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Debug we-want-more",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin",
+                    "we-want-more"
+                ],
+                "filter": {
+                    "name": "we-want-more",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "stopOnEntry": false
+        },
+        {
+            "name": "Debug we-want-more Client",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin",
+                    "we-want-more"
+                ],
+                "filter": {
+                    "name": "we-want-more",
+                    "kind": "bin"
+                }
+            },
+            "args": ["-host", "0.0.0.0", "-port", "5000"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "stopOnEntry": false
+        },
+        {
+            "name": "Debug tests",
+            "type": "lldb",
+            "request": "launch",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--bin",
+                    "we-want-more"
+                ]
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "stopOnEntry": false
+        }
+    ]
+}
