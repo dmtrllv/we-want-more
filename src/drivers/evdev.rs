@@ -1,12 +1,9 @@
-use evdev::{Device, InputEvent, enumerate};
+use evdev::{Device, EventType, InputEvent, RelativeAxisCode, enumerate};
+use std::os::fd::{AsRawFd, BorrowedFd};
 use tokio::{
     io::unix::AsyncFd,
-    sync::{
-        broadcast::Receiver,
-        mpsc::Sender,
-    },
+    sync::{broadcast::Receiver, mpsc::Sender},
 };
-use std::os::fd::{AsRawFd, BorrowedFd};
 
 use crate::platform::PlatformEvent;
 
@@ -27,7 +24,6 @@ pub fn get_mouse() -> Option<Device> {
 
     None
 }
-
 
 pub fn evdev_mouse_reader(
     mut shutdown: Receiver<()>,
@@ -90,6 +86,16 @@ pub fn evdev_mouse_reader(
 }
 
 fn parse_event(event: InputEvent) -> Option<PlatformEvent> {
-    println!("TODO PARSE EVENT: {event:#?}");
+    if event.event_type() == EventType::RELATIVE {
+        match event.code() {
+            code if code == RelativeAxisCode::REL_X.0 => {
+                return Some(PlatformEvent::Move { x: event.value() as i64, y: 0 })
+            }
+            code if code == RelativeAxisCode::REL_Y.0 => {
+                return Some(PlatformEvent::Move { x: 0, y: event.value() as i64 })
+            }
+            _ => {}
+        }
+    }
     None
 }
