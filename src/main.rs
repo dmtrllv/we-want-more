@@ -1,29 +1,21 @@
-use std::io::Error;
+use crate::platform::get_platform;
 
-// use crate::app::Client;
-// use crate::app::Server;
-// use crate::args::Args;
-use crate::{display_manager::DisplayManager, platform::get_display_provider};
-
-mod args;
 mod app;
-mod display_manager;
+mod args;
+mod display;
 mod platform;
 
 fn main() {
     print!("\x1B[2J\x1B[H");
 
-    let Some(display) = get_display_provider() else {
-        println!("Could not resolve display provider!");
-        return;    
+    let Some(driver) = get_platform() else {
+        println!("Could not resolve driver for current platform!");
+        return;
     };
 
-    println!("{display:#?}");
-    
+    println!("{driver:#?}");
 
-    let dm = DisplayManager::new();
-
-    for d in dm.get_displays() {
+    for d in driver.displays() {
         println!("{d:#?}");
     }
 
@@ -34,12 +26,12 @@ fn main() {
     // let Ok(port) = port_str.parse::<u32>() else {
     //     return Err(Error::new(std::io::ErrorKind::InvalidData, format!("Invalid port {port_str}!")));
     // };
-    
+
     // if args.has_command("connect") {
     //     let Some(host) = args.get_arg("host") else {
     //         return Err(Error::new(std::io::ErrorKind::InvalidData, "Missing hostname!"));
     //     };
-    
+
     //     Client::connect(port, host)?;
     // } else {
     //     Server::listen(port)?;
