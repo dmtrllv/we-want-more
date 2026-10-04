@@ -12,11 +12,11 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct HyprlandDriver {}
+pub struct HyprlandDriver;
 
 impl HyprlandDriver {
     pub fn new() -> Self {
-        Self {}
+        Self
     }
 
     fn get_init_cursor() -> Result<Position, String> {

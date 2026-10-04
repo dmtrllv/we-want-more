@@ -32,7 +32,7 @@ pub trait PlatformDriver: std::fmt::Debug + std::marker::Send {
 
 #[cfg(target_os = "windows")]
 pub fn get_platform() -> Option<Box<dyn PlatformDriver>> {
-    todo!("not implemented!");
+    Some(Box::new(crate::drivers::windows::driver::WindowsDriver::new()))
 }
 
 #[cfg(target_os = "macos")]
