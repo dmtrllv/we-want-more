@@ -1,11 +1,13 @@
 use std::{collections::HashMap, env::args};
 
+#[allow(unused)]
 pub struct Args {
     flags: Vec<String>,
     args: HashMap<String, String>,
     values: Vec<String>,
 }
 
+#[allow(unused)]
 impl Args {
     pub fn new() -> Self {
         let mut flags = vec![];
