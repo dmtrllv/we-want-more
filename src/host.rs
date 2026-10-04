@@ -7,7 +7,7 @@ use crate::{
     platform::{PlatformEvent, get_platform},
 };
 #[cfg(target_os = "linux")] 
-use crate::drivers::linux::evdev;
+use crate::drivers::linux::evdev::evdev_mouse_reader;
 
 pub async fn start_host(port: u32) -> Result<(), String> {
     let (shutdown, _) = broadcast::channel::<()>(1);

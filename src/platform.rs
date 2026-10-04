@@ -44,7 +44,7 @@ pub fn get_platform() -> Option<Box<dyn PlatformDriver>> {
 pub fn get_platform() -> Option<Box<dyn PlatformDriver>> {
     let driver: Box<dyn PlatformDriver> = if std::env::var_os("WAYLAND_DISPLAY").is_some() {
         if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some() {
-            Box::new(crate::drivers::hyprland::HyprlandDriver::new())
+            Box::new(crate::drivers::linux::hyprland::HyprlandDriver::new())
         } else if std::env::var_os("SWAYSOCK").is_some() {
             todo!("implement display provider for Sway");
         } else if std::env::var_os("KDE_FULL_SESSION").is_some() {
