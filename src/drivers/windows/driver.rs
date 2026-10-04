@@ -256,7 +256,6 @@ impl PlatformDriver for WindowsDriver {
                     Ok(())
                 }
             });
-
             loop {
                 let mut msg = windows::Win32::UI::WindowsAndMessaging::MSG::default();
 
