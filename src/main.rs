@@ -18,9 +18,10 @@ async fn main() -> Result<(), String> {
 
     let port_str = args.get_arg("port").map_or("5000", |v| v);
 
-    let Ok(port) = port_str.parse::<u32>() else {
-        return Err(format!("Invalid port {port_str}!"));
-    };
+    let port = port_str.parse::<u32>().unwrap_or_else(|_| {
+		println!("Invalid port {port_str}! Using port 5000");
+		5000
+	});
 
     if args.has_command("connect") {
         // let Some(host) = args.get_arg("host") else {

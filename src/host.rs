@@ -4,9 +4,10 @@ use tokio::{net::TcpListener, sync::broadcast};
 
 use crate::{
     display_manager::{DisplayManager, Position},
-    drivers::evdev::evdev_mouse_reader,
     platform::{PlatformEvent, get_platform},
 };
+#[cfg(target_os = "linux")] 
+use crate::drivers::linux::evdev;
 
 pub async fn start_host(port: u32) -> Result<(), String> {
     let (shutdown, _) = broadcast::channel::<()>(1);
@@ -23,6 +24,7 @@ pub async fn start_host(port: u32) -> Result<(), String> {
 
     let driver = driver.start(&shutdown, event_emitter.clone())?;
 
+    #[cfg(target_os = "linux")]
     let evdev_driver = evdev_mouse_reader(shutdown.subscribe(), event_emitter);
 
     loop {
@@ -56,6 +58,8 @@ pub async fn start_host(port: u32) -> Result<(), String> {
         .map_err(|e| e.to_string())?;
 
     driver.await.map_err(|e| e.to_string())??;
+	
+	#[cfg(target_os = "linux")] 
     evdev_driver.await.map_err(|e| e.to_string())?;
 
     Ok(())
