@@ -1,6 +1,20 @@
+use std::cell::RefCell;
+use std::thread;
+
 use tokio::sync::{broadcast, mpsc::Sender};
 
+use windows::Win32::Foundation::{LPARAM, LRESULT, POINT, WPARAM};
+use windows::Win32::Graphics::Gdi::{
+    EnumDisplayMonitors, GetMonitorInfoW, HMONITOR, MONITORINFO, MONITORINFOEXW,
+};
+use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
+use windows::Win32::UI::WindowsAndMessaging::{
+    CallNextHookEx, GetCursorPos, GetMessageW, HC_ACTION, MSLLHOOKSTRUCT, PostThreadMessageW,
+    SetWindowsHookExW, UnhookWindowsHookEx, WH_MOUSE_LL, WM_MOUSEMOVE, WM_QUIT,
+};
+
 use crate::display::{Display, DisplayId};
+use crate::display_manager::Position;
 use crate::platform::{PlatformDriver, PlatformEvent};
 
 #[derive(Debug)]
@@ -12,11 +26,36 @@ impl WindowsDriver {
     }
 }
 
-use windows::Win32::Foundation::LPARAM;
-use windows::Win32::Graphics::Gdi::{
-    EnumDisplayMonitors, GetMonitorInfoW, HMONITOR, MONITORINFO, MONITORINFOEXW,
-};
-use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
+thread_local! {
+    static MOUSE_SENDER: RefCell<Option<Sender<PlatformEvent>>> =
+        const { RefCell::new(None) };
+}
+
+unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+    if code == HC_ACTION as i32 && wparam.0 == WM_MOUSEMOVE as usize {
+        let event = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
+
+        let position = Position(event.pt.x as i64, event.pt.y as i64);
+
+        MOUSE_SENDER.with(|sender| {
+            if let Some(sender) = sender.borrow().as_ref() {
+                let _ = sender.try_send(PlatformEvent::Position(position));
+            }
+        });
+    }
+
+    unsafe { CallNextHookEx(None, code, wparam, lparam) }
+}
+
+fn get_init_cursor() -> Position {
+    let mut pos = POINT::default();
+
+    unsafe {
+        GetCursorPos(&mut pos).unwrap();
+    }
+
+    Position(pos.x as i64, pos.y as i64)
+}
 
 unsafe extern "system" fn monitor_callback(
     monitor: HMONITOR,
@@ -56,7 +95,7 @@ unsafe extern "system" fn monitor_callback(
         let scale_y = dpi_y as f32 / 96.0;
 
         if scale_x != scale_y {
-			println!("Invalid scaling {scale_x} x {scale_y}");
+            println!("Invalid scaling {scale_x} x {scale_y}");
         } else {
             displays.push(Display {
                 id: DisplayId(name),
@@ -93,10 +132,80 @@ impl PlatformDriver for WindowsDriver {
         shutdown: &broadcast::Sender<()>,
         sender: Sender<PlatformEvent>,
     ) -> Result<tokio::task::JoinHandle<Result<(), String>>, String> {
-        let task: tokio::task::JoinHandle<Result<(), String>> = tokio::spawn( async move {
-			Ok(())
-		});
+        let mut driver_shutdown = shutdown.subscribe();
 
-		Ok(task)
+        let (thread_id_tx, thread_id_rx) = std::sync::mpsc::sync_channel::<u32>(1);
+
+        let hook_thread = thread::spawn(move || -> Result<(), String> {
+            MOUSE_SENDER.with(|slot| {
+                *slot.borrow_mut() = Some(sender);
+            });
+
+            let thread_id = unsafe { windows::Win32::System::Threading::GetCurrentThreadId() };
+
+            thread_id_tx.send(thread_id).map_err(|e| e.to_string())?;
+
+            let hook = unsafe { SetWindowsHookExW(WH_MOUSE_LL, Some(mouse_hook), None, 0) }
+                .map_err(|e| e.to_string())?;
+
+            let _ = MOUSE_SENDER.with(|slot| {
+                if let Some(sender) = slot.borrow().as_ref() {
+                    sender.try_send(PlatformEvent::Position(get_init_cursor()))
+                } else {
+                    Ok(())
+                }
+            });
+			
+            loop {
+                let mut msg = windows::Win32::UI::WindowsAndMessaging::MSG::default();
+
+                let result = unsafe { GetMessageW(&mut msg, None, 0, 0) };
+
+                match result.0 {
+                    -1 => {
+                        unsafe {
+                            UnhookWindowsHookEx(hook).unwrap();
+                        }
+
+                        return Err("GetMessageW failed".to_string());
+                    }
+
+                    0 => break,
+
+                    _ => unsafe {
+                        let _ = windows::Win32::UI::WindowsAndMessaging::TranslateMessage(&msg);
+                        windows::Win32::UI::WindowsAndMessaging::DispatchMessageW(&msg);
+                    },
+                }
+            }
+
+            unsafe {
+                UnhookWindowsHookEx(hook).map_err(|e| e.to_string())?;
+            }
+
+            MOUSE_SENDER.with(|slot| {
+                *slot.borrow_mut() = None;
+            });
+
+            Ok(())
+        });
+
+        let thread_id = thread_id_rx.recv().map_err(|e| e.to_string())?;
+
+        let task = tokio::spawn(async move {
+            let _ = driver_shutdown.recv().await;
+
+            unsafe {
+                let _ = PostThreadMessageW(thread_id, WM_QUIT, WPARAM(0), LPARAM(0));
+            }
+
+            hook_thread
+                .join()
+                .map_err(|_| "Mouse hook thread panicked".to_string())??;
+
+            Ok(())
+        });
+
+        Ok(task)
     }
 }
