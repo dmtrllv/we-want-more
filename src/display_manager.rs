@@ -147,18 +147,17 @@ impl DisplayManager {
     pub fn update_virtual_position(&mut self, dx: i64, dy: i64) -> Option<Position> {
         let virtual_pos = Position::add(self.virtual_cursor.clone(), Position(dx, dy));
 
+        self.virtual_cursor = virtual_pos.clone();
+
         let cur = self.get_display_index_at(virtual_pos.clone())?;
 
-        let (cur_display_id, is_host) = self
-            .displays
-            .get(cur)
-            .map(|d| (d.display.id.clone(), d.is_host))?;
+        let display = &self.displays[cur];
 
-        let prev_display_id = self.current_display.clone();
+        let cur_display_id = display.display.id.clone();
+        let is_host = display.is_host;
 
-        let is_same_display = cur_display_id == prev_display_id;
+        let is_same_display = cur_display_id == self.current_display;
 
-        self.virtual_cursor = virtual_pos.clone();
         self.current_display = cur_display_id;
 
         if !is_host {
@@ -168,11 +167,11 @@ impl DisplayManager {
             }
 
             return self.get_phys_position(cur, virtual_pos);
-        } else {
-            if !is_same_display {
-                println!("unlock host");
-                self.is_on_host = true;
-            }
+        }
+
+        if !is_same_display {
+            println!("unlock host");
+            self.is_on_host = true;
         }
 
         None
@@ -196,22 +195,12 @@ impl DisplayManager {
             .iter()
             .enumerate()
             .find(|(_, d)| {
-                if x < d.virtual_position.0 {
-                    return false;
-                }
-                if x > (d.virtual_position.0 + d.display.width) {
-                    return false;
-                }
-                if y < d.virtual_position.1 {
-                    return false;
-                }
-                if y > (d.virtual_position.1 + d.display.height) {
-                    return false;
-                }
-
-                true
+                x >= d.virtual_position.0
+                    && x < d.virtual_position.0 + d.display.width
+                    && y >= d.virtual_position.1
+                    && y < d.virtual_position.1 + d.display.height
             })
-            .map(|s| s.0)
+            .map(|(i, _)| i)
     }
 }
 
