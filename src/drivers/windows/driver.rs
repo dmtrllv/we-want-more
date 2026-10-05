@@ -221,14 +221,39 @@ struct WinMouse {}
 
 impl Mouse for WinMouse {
     fn move_absolute(&mut self, position: Position) {
-        println!("todo; move absolute {position:?}");
+        let virtual_x = unsafe { GetSystemMetrics(SM_XVIRTUALSCREEN) };
+        let virtual_y = unsafe { GetSystemMetrics(SM_YVIRTUALSCREEN) };
+        let virtual_width = unsafe { GetSystemMetrics(SM_CXVIRTUALSCREEN) };
+        let virtual_height = unsafe { GetSystemMetrics(SM_CYVIRTUALSCREEN) };
+
+        let x = ((position.0 - virtual_x as i64) * 65535 / (virtual_width as i64 - 1)) as i32;
+
+        let y = ((position.1 - virtual_y as i64) * 65535 / (virtual_height as i64 - 1)) as i32;
+
+        let input = INPUT {
+            r#type: INPUT_MOUSE,
+            Anonymous: windows::Win32::UI::Input::KeyboardAndMouse::INPUT_0 {
+                mi: MOUSEINPUT {
+                    dx: x,
+                    dy: y,
+                    mouseData: 0,
+                    dwFlags: MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        };
+
+        unsafe {
+            SendInput(&[input], std::mem::size_of::<INPUT>() as i32);
+        }
     }
 
     fn new(init_position: Position) -> Result<Self, String>
     where
         Self: Sized,
     {
-       Ok(Self {  })
+        Ok(Self {})
     }
 }
 
