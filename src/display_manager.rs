@@ -48,7 +48,7 @@ impl DisplayManager {
             return;
         };
 
-        let reference = &reference.display;
+        let reference_display = &reference.display;
         let reference_pos = self.displays.first().unwrap().virtual_position.clone();
 
         let pos = match position {
@@ -62,28 +62,39 @@ impl DisplayManager {
             DisplayPosition::Top => Position(reference_pos.0, reference_pos.1 - display.height),
 
             DisplayPosition::TopRight => Position(
-                reference_pos.0 + reference.width,
+                reference_pos.0 + reference_display.width,
                 reference_pos.1 - display.height,
             ),
 
-            DisplayPosition::Right => Position(reference_pos.0 + reference.width, reference_pos.1),
+            DisplayPosition::Right => Position(reference_pos.0 + reference_display.width, reference_pos.1),
 
             DisplayPosition::BottomRight => Position(
-                reference_pos.0 + reference.width,
-                reference_pos.1 + reference.height,
+                reference_pos.0 + reference_display.width,
+                reference_pos.1 + reference_display.height,
             ),
 
             DisplayPosition::Bottom => {
-                Position(reference_pos.0, reference_pos.1 + reference.height)
+                Position(reference_pos.0, reference_pos.1 + reference_display.height)
             }
 
             DisplayPosition::BottomLeft => Position(
                 reference_pos.0 - display.width,
-                reference_pos.1 + reference.height,
+                reference_pos.1 + reference_display.height,
             ),
         };
 
         println!("added display {display:#?} @ {pos:?}");
+        println!(
+            "ADDING {:?}: reference virtual={:?}, reference size={}x{}, new virtual={:?}, new size={}x{}",
+            position,
+            reference.virtual_position,
+            reference.display.width,
+            reference.display.height,
+            pos,
+            display.width,
+            display.height,
+        );
+
 
         self.displays.push(VirtualDisplay::new_client(display, pos));
     }
