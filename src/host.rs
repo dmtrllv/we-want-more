@@ -45,7 +45,6 @@ pub async fn start_host(port: u32) -> Result<(), String> {
                         dm.update_virtual_position(x, y);
                     }
                     Some(PlatformEvent::InitClient(display, position)) => {
-                        println!("init display {display:#?}");
 						dm.add(display, position);
                     }
                     Some(PlatformEvent::CloseClient(addr)) => {
