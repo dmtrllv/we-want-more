@@ -43,8 +43,10 @@ unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) 
         let position = Position(event.pt.x as i64, event.pt.y as i64);
 
         MOUSE_SENDER.with(|sender| {
-            if let Some(sender) = sender.borrow().as_ref() {
-                let _ = sender.try_send(PlatformEvent::Position(position));
+            if let Some(sender) = sender.borrow().as_ref()
+                && let Err(e) = sender.try_send(PlatformEvent::Position(position))
+            {
+                println!("HOOK: send failed: {e:?}")
             }
         });
     }
@@ -168,7 +170,13 @@ unsafe extern "system" fn window_proc(
                 let dx = mouse.lLastX;
                 let dy = mouse.lLastY;
 
-                println!("mouse delta: {dx}, {dy}");
+                MOUSE_SENDER.with(|sender| {
+                    if let Some(sender) = sender.borrow().as_ref()
+                        && let Err(e) = sender.try_send(PlatformEvent::Move(Position(dx as i64, dy as i64)))
+                    {
+                        println!("HOOK: send failed: {e:?}")
+                    }
+                });
             }
         }
     }

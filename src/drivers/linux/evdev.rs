@@ -92,7 +92,7 @@ fn parse_event(event: InputEvent) -> Option<PlatformEvent> {
                 return Some(PlatformEvent::Move(Position(event.value() as i64, 0)))
             }
             code if code == RelativeAxisCode::REL_Y.0 => {
-                return Some(PlatformEvent::Move(Position(event.value() as i64, 0)))
+                return Some(PlatformEvent::Move(Position(0, event.value() as i64)))
             }
             _ => {}
         }

@@ -1,6 +1,13 @@
-use std::{collections::HashMap, net::SocketAddr};
+use std::{
+    collections::HashMap,
+    net::{SocketAddr, UdpSocket},
+};
 
-use tokio::{io::{AsyncReadExt, AsyncWriteExt}, net::TcpListener, sync::broadcast};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpListener,
+    sync::broadcast,
+};
 
 #[cfg(target_os = "linux")]
 use crate::drivers::linux::evdev::evdev_mouse_reader;
@@ -9,6 +16,12 @@ use crate::{
     display_manager::{DisplayManager, Position},
     platform::{PlatformEvent, get_platform},
 };
+
+fn local_ip() -> Result<std::net::IpAddr, String> {
+    let socket = UdpSocket::bind("0.0.0.0:0").map_err(|s| s.to_string())?;
+    socket.connect("8.8.8.8:80").map_err(|s| s.to_string())?;
+    Ok(socket.local_addr().map_err(|s| s.to_string())?.ip())
+}
 
 pub async fn start_host(port: u32) -> Result<(), String> {
     let (shutdown, _) = broadcast::channel::<()>(1);
@@ -20,8 +33,9 @@ pub async fn start_host(port: u32) -> Result<(), String> {
     let mut dm = DisplayManager::new(&*driver)?;
 
     let (event_emitter, mut event_queue) = tokio::sync::mpsc::channel::<PlatformEvent>(256);
-
-    let server = TcpListener::bind(format!("0.0.0.0:{port}")).await.unwrap();
+    let addr = local_ip()?;
+    let server = TcpListener::bind(&format!("{addr}:{port}")).await.unwrap();
+    println!("Host started on {:?}", addr);
 
     let driver = driver.start(&shutdown, event_emitter.clone())?;
 
@@ -43,13 +57,15 @@ pub async fn start_host(port: u32) -> Result<(), String> {
                         dm.set_physical_position(x, y);
                     }
                     Some(PlatformEvent::Move(Position(x, y))) => {
-                        if let Some(client_pos) = dm.update_virtual_position(x, y) {
+						if let Some(client_pos) = dm.update_virtual_position(x, y) {
+							println!("moved to client pos {client_pos:#?}");
                             let a = dm.current_display.clone().0;
                             let (addr, _) = a.split_once("/").unwrap();
-                            
+
                             for (k, sender) in &socket_emitters {
                                 if k.ip().to_string() == addr {
-                                    let _ = sender.send(PlatformEvent::Position(client_pos));
+									println!("send move event to client");
+                                    let _ = sender.send(PlatformEvent::Move(client_pos));
                                     break;
                                 }
                             }
@@ -98,7 +114,7 @@ pub async fn start_host(port: u32) -> Result<(), String> {
                                     }
                                     Ok(ev) => {
                                         let ev = postcard::to_vec::<PlatformEvent, 128>(&ev).map_err(|e| e.to_string()).unwrap();
-       	                                stream.write(&ev).await.map_err(|e| e.to_string()).unwrap();
+                                           stream.write(&ev).await.map_err(|e| e.to_string()).unwrap();
                                     }
                                 }
                             }
