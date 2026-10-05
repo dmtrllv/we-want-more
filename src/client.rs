@@ -1,11 +1,15 @@
+use std::{thread::sleep, time::Duration};
+
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::TcpStream,
 };
 
-use crate::{display_manager::DisplayPosition, platform::{PlatformEvent, get_platform}};
+use crate::{display_manager::{DisplayPosition, Position}, platform::{PlatformEvent, get_platform}};
 
 pub async fn start_client(port: u32, host: &str) -> Result<(), String> {
+    // let mouse = create_virtual_mouse()?;
+    
     let host = format!("{host}:{port}");
 
     print!("Connecting to {host}... ");
@@ -23,14 +27,16 @@ pub async fn start_client(port: u32, host: &str) -> Result<(), String> {
 		Ok(())
     }
 
-	let displays = get_platform().unwrap().displays();
+	let driver = get_platform().unwrap();
+	let displays = driver.displays();
+    let mut mouse = driver.mouse()?;
 
 	for display in displays {
 		send_event(&mut stream, &PlatformEvent::InitClient(display, DisplayPosition::Left)).await?;
 	}
 	
     let mut buf = [0u8; 128];
-
+    
     loop {
         tokio::select! {
             r = tokio::signal::ctrl_c() => {
@@ -52,6 +58,9 @@ pub async fn start_client(port: u32, host: &str) -> Result<(), String> {
                         match postcard::from_bytes::<PlatformEvent>(&buf) {
                             Ok(event) => {
                                 match event {
+                                    PlatformEvent::Move(position) => {
+                                        mouse.move_absolute(position);
+                                    }
                                     PlatformEvent::CloseClient(_, reason) => { 
                                         println!("Connection ended");
                                         println!("{reason}");

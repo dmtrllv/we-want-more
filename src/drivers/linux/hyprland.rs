@@ -6,9 +6,7 @@ use serde::Deserialize;
 use tokio::{net::UnixStream, sync::mpsc::Sender};
 
 use crate::{
-    display::{Display, DisplayId},
-    display_manager::Position,
-    platform::{PlatformDriver, PlatformEvent},
+    display::{Display, DisplayId}, display_manager::Position, drivers::linux::mouse::LinuxMouse, platform::{Mouse, PlatformDriver, PlatformEvent},
 };
 
 #[derive(Debug)]
@@ -36,6 +34,10 @@ impl HyprlandDriver {
 }
 
 impl PlatformDriver for HyprlandDriver {
+    fn mouse(&self) -> Result<Box<dyn Mouse>, String> {
+        Ok(Box::new(LinuxMouse::new(Self::get_init_cursor()?)?))
+    }
+
     fn displays(&self) -> Vec<Display> {
         let output = std::process::Command::new("hyprctl")
             .args(["-j", "monitors"])
@@ -110,6 +112,7 @@ impl PlatformDriver for HyprlandDriver {
         Ok(task)
     }
 }
+ 
 
 #[derive(Deserialize)]
 struct Monitor {

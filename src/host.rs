@@ -43,7 +43,7 @@ pub async fn start_host(port: u32) -> Result<(), String> {
     let evdev_driver = evdev_mouse_reader(shutdown.subscribe(), event_emitter.clone());
 
     let mut connections: HashMap<SocketAddr, tokio::task::JoinHandle<()>> = HashMap::new();
-    let mut socket_emitters: HashMap<SocketAddr, broadcast::Sender<PlatformEvent>> = HashMap::new();
+    let mut socket_emitters: HashMap<String, broadcast::Sender<PlatformEvent>> = HashMap::new();
 
     loop {
         tokio::select! {
@@ -57,18 +57,18 @@ pub async fn start_host(port: u32) -> Result<(), String> {
                         dm.set_physical_position(x, y);
                     }
                     Some(PlatformEvent::Move(Position(x, y))) => {
-						if let Some(client_pos) = dm.update_virtual_position(x, y) {
-							println!("moved to client pos {client_pos:#?}");
+                        if let Some(client_pos) = dm.update_virtual_position(x, y) {
+                            println!("moved to client pos {client_pos:#?}");
                             let a = dm.current_display.clone().0;
                             let (addr, _) = a.split_once("/").unwrap();
-
-                            for (k, sender) in &socket_emitters {
-                                if k.ip().to_string() == addr {
-									println!("send move event to client");
-                                    let _ = sender.send(PlatformEvent::Move(client_pos));
-                                    break;
-                                }
+                            println!("send to addr {addr:?}");
+                            if let Some(sender) = socket_emitters.get(addr) {
+                                println!("send move event to client");
+                                let _ = sender.send(PlatformEvent::Move(client_pos));
+                            } else {
+                                println!("could not get client");
                             }
+                            
                         }
                     }
                     Some(PlatformEvent::InitClient(display, position)) => {
@@ -100,7 +100,7 @@ pub async fn start_host(port: u32) -> Result<(), String> {
                 let platform_event_emitter = event_emitter.clone();
                 let mut shutdown_reader = shutdown.subscribe();
                 let (s, mut socket_receiver) = broadcast::channel::<PlatformEvent>(16);
-                socket_emitters.insert(addr, s);
+                socket_emitters.insert(addr.to_string(), s);
                 connections.insert(addr, tokio::spawn(async move {
                     let mut buf = [0u8; 128];
                     loop {
@@ -114,7 +114,8 @@ pub async fn start_host(port: u32) -> Result<(), String> {
                                     }
                                     Ok(ev) => {
                                         let ev = postcard::to_vec::<PlatformEvent, 128>(&ev).map_err(|e| e.to_string()).unwrap();
-                                           stream.write(&ev).await.map_err(|e| e.to_string()).unwrap();
+                                        println!("send event to client {:#?}", ev);
+                                        stream.write(&ev).await.map_err(|e| e.to_string()).unwrap();
                                     }
                                 }
                             }
@@ -168,7 +169,10 @@ pub async fn start_host(port: u32) -> Result<(), String> {
     driver.await.map_err(|e| e.to_string())??;
 
     #[cfg(target_os = "linux")]
-    evdev_driver.await.map_err(|e| e.to_string())?;
+    evdev_driver.await.unwrap();
 
+    for (_, task) in connections {
+        task.await.map_err(|e| e.to_string())?;
+    }
     Ok(())
 }

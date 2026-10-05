@@ -1,13 +1,15 @@
-use std::net::SocketAddr;
 use serde::{Deserialize, Serialize};
+use std::net::SocketAddr;
 
 use tokio::sync::mpsc::Sender;
 
-use crate::{display::Display, display_manager::{DisplayPosition, Position}};
+use crate::{
+    display::Display,
+    display_manager::{DisplayPosition, Position},
+};
 
 #[allow(unused)]
-#[derive(Debug, Clone)]
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum MouseButton {
     Left,
     Middle,
@@ -15,13 +17,15 @@ pub enum MouseButton {
 }
 
 #[allow(unused)]
-#[derive(Debug, Clone)]
-#[derive(Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PlatformEvent {
-	InitClient(Display, DisplayPosition),
-	CloseClient(SocketAddr, String),
+    InitClient(Display, DisplayPosition),
+    CloseClient(SocketAddr, String),
     Shutdown,
-    Click { button: MouseButton, position: Position },
+    Click {
+        button: MouseButton,
+        position: Position,
+    },
     Position(Position),
     Move(Position),
 }
@@ -33,13 +37,22 @@ pub trait PlatformDriver: std::fmt::Debug + std::marker::Send {
         shutdown: &tokio::sync::broadcast::Sender<()>,
         sender: Sender<PlatformEvent>,
     ) -> Result<tokio::task::JoinHandle<Result<(), String>>, String>;
+
+    fn mouse(&self) -> Result<Box<dyn Mouse>, String>;
 }
 
-
+pub trait Mouse {
+    fn move_absolute(&mut self, position: Position);
+    fn new(init_position: Position) -> Result<Self, String>
+    where
+        Self: Sized;
+}
 
 #[cfg(target_os = "windows")]
 pub fn get_platform() -> Option<Box<dyn PlatformDriver>> {
-    Some(Box::new(crate::drivers::windows::driver::WindowsDriver::new()))
+    Some(Box::new(
+        crate::drivers::windows::driver::WindowsDriver::new(),
+    ))
 }
 
 #[cfg(target_os = "macos")]

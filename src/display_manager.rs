@@ -3,7 +3,7 @@ use std::net::SocketAddr;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    display::{self, Display, DisplayId},
+    display::{Display, DisplayId},
     platform::PlatformDriver,
 };
 
@@ -125,7 +125,6 @@ impl DisplayManager {
 
     pub fn update_virtual_position(&mut self, dx: i64, dy: i64) -> Option<Position> {
         let virtual_pos = Position::add(self.virtual_cursor.clone(), Position(dx, dy));
-        println!("update virtual {virtual_pos:?}");
 
         let cur = self.get_display_index_at(virtual_pos.clone())?;
 
@@ -225,13 +224,6 @@ impl VirtualDisplay {
 pub struct Position(pub i64, pub i64);
 
 impl Position {
-    pub fn add_assign(&mut self, other: impl Into<Position>) -> &mut Self {
-        let other = other.into();
-        self.0 += other.0;
-        self.1 += other.1;
-        self
-    }
-
     pub fn add(a: impl Into<Position>, other: impl Into<Position>) -> Self {
         let a: Position = a.into();
         let other = other.into();

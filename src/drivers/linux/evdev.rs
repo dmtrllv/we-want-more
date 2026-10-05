@@ -7,6 +7,7 @@ use tokio::{
 
 use crate::{display_manager::Position, platform::PlatformEvent};
 
+// TODO: support multiple devices and touchpads (for now only my bluetooth mouse works)
 pub fn get_mouse() -> Option<Device> {
     for (_, device) in enumerate() {
         let supported = device.supported_events();
