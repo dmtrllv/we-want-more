@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use crate::{
     display::{Display, DisplayId},
     platform::PlatformDriver,
@@ -89,6 +91,7 @@ impl VirtualDisplay {
 
 #[allow(unused)]
 #[derive(Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct Position(pub i64, pub i64);
 
 impl Position {

@@ -1,4 +1,5 @@
 use std::net::SocketAddr;
+use serde::{Deserialize, Serialize};
 
 use tokio::sync::mpsc::Sender;
 
@@ -6,6 +7,7 @@ use crate::{display::Display, display_manager::Position};
 
 #[allow(unused)]
 #[derive(Debug)]
+#[derive(Serialize, Deserialize)]
 pub enum MouseButton {
     Left,
     Middle,
@@ -14,13 +16,14 @@ pub enum MouseButton {
 
 #[allow(unused)]
 #[derive(Debug)]
+#[derive(Serialize, Deserialize)]
 pub enum PlatformEvent {
+	InitClient(),
+	CloseClient(SocketAddr),
+    Shutdown,
     Click { button: MouseButton, position: Position },
     Position(Position),
     Move(Position),
-    Shutdown,
-	CloseClient(SocketAddr),
-	InitClient(),
 }
 
 pub trait PlatformDriver: std::fmt::Debug + std::marker::Send {

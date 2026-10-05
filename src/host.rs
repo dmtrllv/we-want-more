@@ -1,8 +1,8 @@
-use std::{collections::HashMap, io::Error, net::SocketAddr};
+use std::{collections::HashMap, net::SocketAddr};
 
 use tokio::{
     io::AsyncReadExt,
-    net::{TcpListener, TcpStream},
+    net::TcpListener,
     sync::broadcast,
 };
 
@@ -79,11 +79,13 @@ pub async fn start_host(port: u32) -> Result<(), String> {
 											let _ = sender.send(PlatformEvent::CloseClient(addr)).await;
                                             return;
                                         }
-                                        let response = String::from_utf8_lossy(&buf[..size]);
-										if let Some(event) = parse_client_event(&response) {
-											let _ = sender.send(event).await;
+                                        
+										match postcard::from_bytes::<PlatformEvent>(&buf) {
+											Ok(event) => {
+												let _ = sender.send(event).await;
+											},
+											Err(err) => println!("{err:?}"),
 										}
-                                        println!("received client message: {response}");
                                     }
                                 }
                             }
@@ -109,8 +111,4 @@ pub async fn start_host(port: u32) -> Result<(), String> {
     evdev_driver.await.map_err(|e| e.to_string())?;
 
     Ok(())
-}
-
-fn parse_client_event(data: &str) -> Option<PlatformEvent> {
-	None
 }
