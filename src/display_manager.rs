@@ -40,7 +40,7 @@ impl DisplayManager {
 
     pub fn add(&mut self, display: Display, position: DisplayPosition) {
         // todo: calculate virtual position
-        println!("removed display  @ {position:?}\n{display:#?}");
+        println!("added display {display:#?} @ {position:?}");
         self.displays.push(VirtualDisplay::new_client(display));
     }
 

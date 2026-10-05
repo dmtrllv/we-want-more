@@ -28,7 +28,7 @@ pub async fn start_host(port: u32) -> Result<(), String> {
 
     let mut connections: HashMap<SocketAddr, tokio::task::JoinHandle<()>> = HashMap::new();
 
-    let (client_broadcaster, mut sender) = broadcast::channel::<PlatformEvent>(16);
+    //let (client_broadcaster, mut sender) = broadcast::channel::<PlatformEvent>(16);
 
     loop {
         tokio::select! {
@@ -65,31 +65,28 @@ pub async fn start_host(port: u32) -> Result<(), String> {
                 println!("Client connected: {addr}");
                 let sender = event_emitter.clone();
                 let mut shutdown_reader = shutdown.subscribe();
-                let mut platform_events = client_broadcaster.subscribe();
+                //let mut platform_events = client_broadcaster.subscribe();
                 connections.insert(addr, tokio::spawn(async move {
                     let mut buf = [0u8; 64];
                     loop {
                         tokio::select! {
-                            event = platform_events.recv() => {
-                                match event {
-                                    Err(e) => {
-                                        println!("{}", e);
-                                        continue;
-                                    }
-                                    Ok(event) => {
-                                        match event {
-											PlatformEvent::InitClient(mut display, pos) => {
-												display.id = DisplayId(format!("{addr}/{}", display.id.0));
-												let _ = sender.send(PlatformEvent::InitClient(display, pos)).await;
-											}
-											PlatformEvent::CloseClient(_) => {
-												let _ = sender.send(event).await;
-											}
-											_ => {}
-										}
-                                    }
-                                }
-                            }
+                            //event = platform_events.recv() => {
+                            //    match event {
+                            //        Err(e) => {
+                            //            println!("{}", e);
+                            //            continue;
+                            //        }
+                            //        Ok(event) => {
+                            //            match event {
+
+							//				PlatformEvent::CloseClient(_) => {
+							//					let _ = sender.send(event).await;
+							//				}
+							//				_ => {}
+							//			}
+                            //        }
+                            //    }
+                            //}
                             r = stream.read(&mut buf) => {
                                 match r {
                                     Err(e) => {
@@ -105,7 +102,15 @@ pub async fn start_host(port: u32) -> Result<(), String> {
 
                                         match postcard::from_bytes::<PlatformEvent>(&buf) {
                                             Ok(event) => {
-                                                let _ = sender.send(event).await;
+												match event {
+													PlatformEvent::InitClient(mut display, pos) => {
+														display.id = DisplayId(format!("{addr}/{}", display.id.0));
+														let _ = sender.send(PlatformEvent::InitClient(display, pos)).await;
+													}
+													_ => {
+														let _ = sender.send(event).await;
+													}
+												}
                                             },
                                             Err(err) => println!("{err:?}"),
                                         }
