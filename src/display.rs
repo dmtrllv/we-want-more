@@ -1,5 +1,8 @@
+use serde::{Deserialize, Serialize};
+
 #[allow(unused)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
+#[derive(Serialize, Deserialize)]
 pub struct Display {
     pub id: DisplayId,
     pub x: i64,
@@ -11,4 +14,5 @@ pub struct Display {
 
 #[allow(unused)]
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize)]
 pub struct DisplayId(pub String);

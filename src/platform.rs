@@ -3,10 +3,10 @@ use serde::{Deserialize, Serialize};
 
 use tokio::sync::mpsc::Sender;
 
-use crate::{display::Display, display_manager::Position};
+use crate::{display::Display, display_manager::{DisplayPosition, Position}};
 
 #[allow(unused)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[derive(Serialize, Deserialize)]
 pub enum MouseButton {
     Left,
@@ -15,10 +15,10 @@ pub enum MouseButton {
 }
 
 #[allow(unused)]
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[derive(Serialize, Deserialize)]
 pub enum PlatformEvent {
-	InitClient(),
+	InitClient(Display, DisplayPosition),
 	CloseClient(SocketAddr),
     Shutdown,
     Click { button: MouseButton, position: Position },

@@ -1,16 +1,11 @@
 use std::{collections::HashMap, net::SocketAddr};
 
-use tokio::{
-    io::AsyncReadExt,
-    net::TcpListener,
-    sync::broadcast,
-};
+use tokio::{io::AsyncReadExt, net::TcpListener, sync::broadcast};
 
 #[cfg(target_os = "linux")]
 use crate::drivers::linux::evdev::evdev_mouse_reader;
 use crate::{
-    display_manager::{DisplayManager, Position},
-    platform::{PlatformEvent, get_platform},
+    display::DisplayId, display_manager::{DisplayManager, Position}, platform::{PlatformEvent, get_platform},
 };
 
 pub async fn start_host(port: u32) -> Result<(), String> {
@@ -33,6 +28,8 @@ pub async fn start_host(port: u32) -> Result<(), String> {
 
     let mut connections: HashMap<SocketAddr, tokio::task::JoinHandle<()>> = HashMap::new();
 
+    let (client_broadcaster, mut sender) = broadcast::channel::<PlatformEvent>(16);
+
     loop {
         tokio::select! {
             r = tokio::signal::ctrl_c() => {
@@ -47,10 +44,15 @@ pub async fn start_host(port: u32) -> Result<(), String> {
                     Some(PlatformEvent::Move(Position(x, y))) => {
                         dm.update_virtual_position(x, y);
                     }
-					Some(PlatformEvent::CloseClient(addr)) => {
+                    Some(PlatformEvent::InitClient(display, position)) => {
+                        println!("init display {display:#?}");
+						dm.add(display, position);
+                    }
+                    Some(PlatformEvent::CloseClient(addr)) => {
+						dm.remove_displays(addr);
                         if let Some(connection) = connections.remove(&addr) {
-							connection.await.unwrap();
-						}
+                            connection.await.unwrap();
+                        }
                     }
                     Some(event) => {
                         println!("GOT EVENT: {event:?}");
@@ -61,12 +63,33 @@ pub async fn start_host(port: u32) -> Result<(), String> {
             result = server.accept() => {
                 let (mut stream, addr) = result.unwrap();
                 println!("Client connected: {addr}");
-				let sender = event_emitter.clone();
-				let mut shutdown_reader = shutdown.subscribe();
+                let sender = event_emitter.clone();
+                let mut shutdown_reader = shutdown.subscribe();
+                let mut platform_events = client_broadcaster.subscribe();
                 connections.insert(addr, tokio::spawn(async move {
-    				let mut buf = [0u8; 64];
+                    let mut buf = [0u8; 64];
                     loop {
                         tokio::select! {
+                            event = platform_events.recv() => {
+                                match event {
+                                    Err(e) => {
+                                        println!("{}", e);
+                                        continue;
+                                    }
+                                    Ok(event) => {
+                                        match event {
+											PlatformEvent::InitClient(mut display, pos) => {
+												display.id = DisplayId(format!("{addr}/{}", display.id.0));
+												let _ = sender.send(PlatformEvent::InitClient(display, pos)).await;
+											}
+											PlatformEvent::CloseClient(_) => {
+												let _ = sender.send(event).await;
+											}
+											_ => {}
+										}
+                                    }
+                                }
+                            }
                             r = stream.read(&mut buf) => {
                                 match r {
                                     Err(e) => {
@@ -76,26 +99,26 @@ pub async fn start_host(port: u32) -> Result<(), String> {
                                     Ok(size) => {
                                         if size == 0 {
                                             println!("client closed the connection");
-											let _ = sender.send(PlatformEvent::CloseClient(addr)).await;
+                                            let _ = sender.send(PlatformEvent::CloseClient(addr)).await;
                                             return;
                                         }
-                                        
-										match postcard::from_bytes::<PlatformEvent>(&buf) {
-											Ok(event) => {
-												let _ = sender.send(event).await;
-											},
-											Err(err) => println!("{err:?}"),
-										}
+
+                                        match postcard::from_bytes::<PlatformEvent>(&buf) {
+                                            Ok(event) => {
+                                                let _ = sender.send(event).await;
+                                            },
+                                            Err(err) => println!("{err:?}"),
+                                        }
                                     }
                                 }
                             }
 
-							r = shutdown_reader.recv() => {
-								if let Err(err) = r {
-									println!("{err:?}");
-								};
-                				return;
-							}
+                            r = shutdown_reader.recv() => {
+                                if let Err(err) = r {
+                                    println!("{err:?}");
+                                };
+                                return;
+                            }
                         }
                     }
                 }));

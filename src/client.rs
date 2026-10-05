@@ -3,7 +3,7 @@ use tokio::{
     net::TcpStream,
 };
 
-use crate::platform::PlatformEvent;
+use crate::{display_manager::DisplayPosition, platform::{PlatformEvent, get_platform}};
 
 pub async fn start_client(port: u32, host: &str) -> Result<(), String> {
     let host = format!("{host}:{port}");
@@ -16,18 +16,26 @@ pub async fn start_client(port: u32, host: &str) -> Result<(), String> {
 
     println!("connected!");
 
-    //let (shutdown, _) = broadcast::channel::<()>(1);
+    async fn send_event(stream: &mut TcpStream, ev: &PlatformEvent) -> Result<(), String> {
+        let ev = postcard::to_vec::<PlatformEvent, 64>(ev)
+            .map_err(|e| e.to_string())?;
+       	stream.write(&ev).await.map_err(|e| e.to_string())?;
+		Ok(())
+    }
 
-    let _ = stream.write(b"Hello!").await;
+	let displays = get_platform().unwrap().displays();
 
+	for display in displays {
+		send_event(&mut stream, &PlatformEvent::InitClient(display, DisplayPosition::Left)).await?;
+	}
+	
     let mut buf = [0u8; 64];
 
     loop {
         tokio::select! {
             r = tokio::signal::ctrl_c() => {
                 r.map_err(|e| e.to_string())?;
-                let ev = postcard::to_vec::<PlatformEvent, 64>(&PlatformEvent::CloseClient(addr)).map_err(|e| e.to_string())?;
-                let _ = stream.write(&ev).await;
+				send_event(&mut stream, &PlatformEvent::CloseClient(addr)).await?;
                 break;
             }
             r = stream.read(&mut buf) => {
