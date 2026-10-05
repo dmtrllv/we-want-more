@@ -44,57 +44,65 @@ impl DisplayManager {
     }
 
     pub fn add(&mut self, display: Display, position: DisplayPosition) {
-        let Some(reference) = self.displays.first() else {
+        let Some(reference) = self.displays.iter().max_by_key(|d| match position {
+            DisplayPosition::Left | DisplayPosition::TopLeft | DisplayPosition::BottomLeft => {
+                -(d.virtual_position.0)
+            }
+
+            DisplayPosition::Right | DisplayPosition::TopRight | DisplayPosition::BottomRight => {
+                d.virtual_position.0 + d.display.width
+            }
+
+            DisplayPosition::Top => -(d.virtual_position.1),
+
+            DisplayPosition::Bottom => d.virtual_position.1 + d.display.height,
+        }) else {
             return;
         };
 
-        let reference_display = &reference.display;
-        let reference_pos = self.displays.first().unwrap().virtual_position.clone();
-
         let pos = match position {
-            DisplayPosition::Left => Position(reference_pos.0 - display.width, reference_pos.1),
+            DisplayPosition::Left => Position(
+                reference.virtual_position.0 - display.width,
+                reference.virtual_position.1,
+            ),
 
             DisplayPosition::TopLeft => Position(
-                reference_pos.0 - display.width,
-                reference_pos.1 - display.height,
+                reference.virtual_position.0 - display.width,
+                reference.virtual_position.1 - display.height,
             ),
 
-            DisplayPosition::Top => Position(reference_pos.0, reference_pos.1 - display.height),
+            DisplayPosition::Top => Position(
+                reference.virtual_position.0,
+                reference.virtual_position.1 - display.height,
+            ),
 
             DisplayPosition::TopRight => Position(
-                reference_pos.0 + reference_display.width,
-                reference_pos.1 - display.height,
+                reference.virtual_position.0 + reference.display.width,
+                reference.virtual_position.1 - display.height,
             ),
 
-            DisplayPosition::Right => Position(reference_pos.0 + reference_display.width, reference_pos.1),
+            DisplayPosition::Right => Position(
+                reference.virtual_position.0 + reference.display.width,
+                reference.virtual_position.1,
+            ),
 
             DisplayPosition::BottomRight => Position(
-                reference_pos.0 + reference_display.width,
-                reference_pos.1 + reference_display.height,
+                reference.virtual_position.0 + reference.display.width,
+                reference.virtual_position.1 + reference.display.height,
             ),
 
-            DisplayPosition::Bottom => {
-                Position(reference_pos.0, reference_pos.1 + reference_display.height)
-            }
+            DisplayPosition::Bottom => Position(
+                reference.virtual_position.0,
+                reference.virtual_position.1 + reference.display.height,
+            ),
 
             DisplayPosition::BottomLeft => Position(
-                reference_pos.0 - display.width,
-                reference_pos.1 + reference_display.height,
+                reference.virtual_position.0 - display.width,
+                reference.virtual_position.1 + reference.display.height,
             ),
         };
 
         println!("added display {display:#?} @ {pos:?}");
-        println!(
-            "ADDING {:?}: reference virtual={:?}, reference size={}x{}, new virtual={:?}, new size={}x{}",
-            position,
-            reference.virtual_position,
-            reference.display.width,
-            reference.display.height,
-            pos,
-            display.width,
-            display.height,
-        );
-
 
         self.displays.push(VirtualDisplay::new_client(display, pos));
     }
