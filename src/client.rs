@@ -8,16 +8,16 @@ use crate::{display_manager::DisplayPosition, platform::{PlatformEvent, get_plat
 pub async fn start_client(port: u32, host: &str) -> Result<(), String> {
     let host = format!("{host}:{port}");
 
-    println!("connecting to {host}...");
+    print!("Connecting to {host}... ");
 
     let mut stream = TcpStream::connect(host).await.map_err(|e| e.to_string())?;
 
     let addr = stream.peer_addr().map_err(|s| s.to_string())?;
 
-    println!("connected!");
+    println!("Connected!");
 
     async fn send_event(stream: &mut TcpStream, ev: &PlatformEvent) -> Result<(), String> {
-        let ev = postcard::to_vec::<PlatformEvent, 64>(ev)
+        let ev = postcard::to_vec::<PlatformEvent, 128>(ev)
             .map_err(|e| e.to_string())?;
        	stream.write(&ev).await.map_err(|e| e.to_string())?;
 		Ok(())
@@ -29,13 +29,13 @@ pub async fn start_client(port: u32, host: &str) -> Result<(), String> {
 		send_event(&mut stream, &PlatformEvent::InitClient(display, DisplayPosition::Left)).await?;
 	}
 	
-    let mut buf = [0u8; 64];
+    let mut buf = [0u8; 128];
 
     loop {
         tokio::select! {
             r = tokio::signal::ctrl_c() => {
                 r.map_err(|e| e.to_string())?;
-				send_event(&mut stream, &PlatformEvent::CloseClient(addr)).await?;
+				send_event(&mut stream, &PlatformEvent::CloseClient(addr, "Client closed".to_string())).await?;
                 break;
             }
             r = stream.read(&mut buf) => {
@@ -51,7 +51,14 @@ pub async fn start_client(port: u32, host: &str) -> Result<(), String> {
                         }
                         match postcard::from_bytes::<PlatformEvent>(&buf) {
                             Ok(event) => {
-                                println!("{event:#?}");
+                                match event {
+                                    PlatformEvent::CloseClient(_, reason) => { 
+                                        println!("Connection ended");
+                                        println!("{reason}");
+                                        return Ok(());
+                                     },
+                                    _ => { println!("{event:#?}"); }
+                                }
                             },
                             Err(err) => println!("{err:?}"),
                         }

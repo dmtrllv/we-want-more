@@ -19,7 +19,7 @@ pub enum MouseButton {
 #[derive(Serialize, Deserialize)]
 pub enum PlatformEvent {
 	InitClient(Display, DisplayPosition),
-	CloseClient(SocketAddr),
+	CloseClient(SocketAddr, String),
     Shutdown,
     Click { button: MouseButton, position: Position },
     Position(Position),
