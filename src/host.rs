@@ -1,13 +1,17 @@
-use std::io::Error;
+use std::{collections::HashMap, io::Error, net::SocketAddr};
 
-use tokio::{net::TcpListener, sync::broadcast};
+use tokio::{
+    io::AsyncReadExt,
+    net::{TcpListener, TcpStream},
+    sync::broadcast,
+};
 
+#[cfg(target_os = "linux")]
+use crate::drivers::linux::evdev::evdev_mouse_reader;
 use crate::{
     display_manager::{DisplayManager, Position},
     platform::{PlatformEvent, get_platform},
 };
-#[cfg(target_os = "linux")] 
-use crate::drivers::linux::evdev::evdev_mouse_reader;
 
 pub async fn start_host(port: u32) -> Result<(), String> {
     let (shutdown, _) = broadcast::channel::<()>(1);
@@ -20,12 +24,14 @@ pub async fn start_host(port: u32) -> Result<(), String> {
 
     let (event_emitter, mut event_queue) = tokio::sync::mpsc::channel::<PlatformEvent>(256);
 
-    let server = tokio::spawn(run_server(port, shutdown.subscribe()));
+    let server = TcpListener::bind(format!("0.0.0.0:{port}")).await.unwrap();
 
     let driver = driver.start(&shutdown, event_emitter.clone())?;
 
     #[cfg(target_os = "linux")]
     let evdev_driver = evdev_mouse_reader(shutdown.subscribe(), event_emitter);
+
+    let mut connections: HashMap<SocketAddr, tokio::task::JoinHandle<()>> = HashMap::new();
 
     loop {
         tokio::select! {
@@ -41,48 +47,70 @@ pub async fn start_host(port: u32) -> Result<(), String> {
                     Some(PlatformEvent::Move(Position(x, y))) => {
                         dm.update_virtual_position(x, y);
                     }
+					Some(PlatformEvent::CloseClient(addr)) => {
+                        if let Some(connection) = connections.remove(&addr) {
+							connection.await.unwrap();
+						}
+                    }
                     Some(event) => {
                         println!("GOT EVENT: {event:?}");
                     }
                     None => break
                 }
             }
+            result = server.accept() => {
+                let (mut stream, addr) = result.unwrap();
+                println!("Client connected: {addr}");
+				let sender = event_emitter.clone();
+				let mut shutdown_reader = shutdown.subscribe();
+                connections.insert(addr, tokio::spawn(async move {
+    				let mut buf = [0u8; 64];
+                    loop {
+                        tokio::select! {
+                            r = stream.read(&mut buf) => {
+                                match r {
+                                    Err(e) => {
+                                        println!("{}", e);
+                                        continue;
+                                    }
+                                    Ok(size) => {
+                                        if size == 0 {
+                                            println!("client closed the connection");
+											let _ = sender.send(PlatformEvent::CloseClient(addr)).await;
+                                            return;
+                                        }
+                                        let response = String::from_utf8_lossy(&buf[..size]);
+										if let Some(event) = parse_client_event(&response) {
+											let _ = sender.send(event).await;
+										}
+                                        println!("received client message: {response}");
+                                    }
+                                }
+                            }
+
+							r = shutdown_reader.recv() => {
+								if let Err(err) = r {
+									println!("{err:?}");
+								};
+                				return;
+							}
+                        }
+                    }
+                }));
+            }
         }
     }
 
     let _ = shutdown.send(());
 
-    server
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())?;
-
     driver.await.map_err(|e| e.to_string())??;
-	
-	#[cfg(target_os = "linux")] 
+
+    #[cfg(target_os = "linux")]
     evdev_driver.await.map_err(|e| e.to_string())?;
 
     Ok(())
 }
 
-async fn run_server(port: u32, mut shutdown: broadcast::Receiver<()>) -> Result<(), Error> {
-    let listener = TcpListener::bind(format!("0.0.0.0:{port}")).await?;
-
-    loop {
-        tokio::select! {
-            result = listener.accept() => {
-                let (_stream, addr) = result?;
-                println!("Client connected: {addr}");
-
-                // Handle or spawn a task for the client.
-            }
-
-            _ = shutdown.recv() => {
-                println!("Shutting down server");
-                break;
-            }
-        }
-    }
-
-    Ok(())
+fn parse_client_event(data: &str) -> Option<PlatformEvent> {
+	None
 }

@@ -1,3 +1,5 @@
+use std::net::SocketAddr;
+
 use tokio::sync::mpsc::Sender;
 
 use crate::{display::Display, display_manager::Position};
@@ -17,6 +19,8 @@ pub enum PlatformEvent {
     Position(Position),
     Move(Position),
     Shutdown,
+	CloseClient(SocketAddr),
+	InitClient(),
 }
 
 pub trait PlatformDriver: std::fmt::Debug + std::marker::Send {
