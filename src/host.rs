@@ -37,6 +37,7 @@ pub async fn start_host(port: u32) -> Result<(), String> {
     let server = TcpListener::bind(&format!("{addr}:{port}")).await.unwrap();
     println!("Host started on {:?}", addr);
 
+    let mut mouse = driver.mouse()?;
     let driver = driver.start(&shutdown, event_emitter.clone())?;
 
     #[cfg(target_os = "linux")]
@@ -54,7 +55,9 @@ pub async fn start_host(port: u32) -> Result<(), String> {
             event = event_queue.recv() => {
                 match event {
                     Some(PlatformEvent::Position(Position(x, y))) => {
-                        dm.set_physical_position(x, y);
+                        if let Some(pos) = dm.calc_host_physical_position(x, y) {
+                            mouse.move_absolute(pos);
+                        }
                     }
                     Some(PlatformEvent::Move(Position(x, y))) => {
                         if let Some(client_pos) = dm.update_virtual_position(x, y) {
