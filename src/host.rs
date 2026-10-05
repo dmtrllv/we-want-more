@@ -29,7 +29,7 @@ pub async fn start_host(port: u32) -> Result<(), String> {
     let driver = driver.start(&shutdown, event_emitter.clone())?;
 
     #[cfg(target_os = "linux")]
-    let evdev_driver = evdev_mouse_reader(shutdown.subscribe(), event_emitter);
+    let evdev_driver = evdev_mouse_reader(shutdown.subscribe(), event_emitter.clone());
 
     let mut connections: HashMap<SocketAddr, tokio::task::JoinHandle<()>> = HashMap::new();
 
