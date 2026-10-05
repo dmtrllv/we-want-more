@@ -20,7 +20,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 use crate::display::{Display, DisplayId};
 use crate::display_manager::Position;
-use crate::platform::{PlatformDriver, PlatformEvent};
+use crate::platform::{Mouse, PlatformDriver, PlatformEvent};
 
 #[derive(Debug)]
 pub struct WindowsDriver;
@@ -172,7 +172,8 @@ unsafe extern "system" fn window_proc(
 
                 MOUSE_SENDER.with(|sender| {
                     if let Some(sender) = sender.borrow().as_ref()
-                        && let Err(e) = sender.try_send(PlatformEvent::Move(Position(dx as i64, dy as i64)))
+                        && let Err(e) =
+                            sender.try_send(PlatformEvent::Move(Position(dx as i64, dy as i64)))
                     {
                         println!("HOOK: send failed: {e:?}")
                     }
@@ -216,7 +217,25 @@ fn create_message_window() -> Result<HWND, String> {
     }
 }
 
+struct WinMouse {}
+
+impl Mouse for WinMouse {
+    fn move_absolute(&mut self, position: Position) {
+        println!("todo; move absolute {position:?}");
+    }
+
+    fn new(init_position: Position) -> Result<Self, String>
+    where
+        Self: Sized,
+    {
+       Ok(Self {  })
+    }
+}
+
 impl PlatformDriver for WindowsDriver {
+    fn mouse(&self) -> Result<Box<dyn crate::platform::Mouse>, String> {
+        Ok(Box::new(WinMouse::new(Position(0, 0))?))
+    }
     fn displays(&self) -> Vec<Display> {
         let mut displays = Vec::new();
 
