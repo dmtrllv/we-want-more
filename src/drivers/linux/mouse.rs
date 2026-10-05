@@ -36,6 +36,7 @@ impl Mouse for LinuxMouse {
         let dx = position.0 - self.position.0;
         let dy = position.1 - self.position.1;
         println!("move mouse {:?} -> dx {} dy {}", position, dx, dy);
+        self.position = position;
         let _ = self.device.emit(&[
             InputEvent::new(EventType::RELATIVE.0, RelativeAxisCode::REL_X.0, dx as i32),
             InputEvent::new(EventType::RELATIVE.0, RelativeAxisCode::REL_Y.0, dy as i32),

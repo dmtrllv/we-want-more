@@ -117,10 +117,31 @@ impl DisplayManager {
     }
 
     pub fn set_physical_position(&mut self, x: i64, y: i64) {
-        if self.is_on_host {
-            self.physical_cursor = Position(x, y);
-            self.virtual_cursor = Position(x, y);
+        if !self.is_on_host {
+            return;
         }
+
+        self.physical_cursor = Position(x, y);
+
+        let Some(display_index) = self.displays.iter().position(|d| {
+            if !d.is_host {
+                return false;
+            }
+
+            x >= d.display.x
+                && x <= d.display.x + d.display.width
+                && y >= d.display.y
+                && y <= d.display.y + d.display.height
+        }) else {
+            return;
+        };
+
+        let display = &self.displays[display_index];
+
+        self.virtual_cursor = Position(
+            display.virtual_position.0 + (x - display.display.x),
+            display.virtual_position.1 + (y - display.display.y),
+        );
     }
 
     pub fn update_virtual_position(&mut self, dx: i64, dy: i64) -> Option<Position> {
@@ -164,8 +185,8 @@ impl DisplayManager {
     ) -> Option<Position> {
         self.displays.get(display_index).map(|display| {
             Position(
-                virtual_position.0 - display.virtual_position.0,
-                virtual_position.1 - display.virtual_position.1,
+                display.display.x + (virtual_position.0 - display.virtual_position.0),
+                display.display.y + (virtual_position.1 - display.virtual_position.1),
             )
         })
     }
