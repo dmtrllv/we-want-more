@@ -21,7 +21,10 @@ impl DisplayManager {
         let displays: Vec<VirtualDisplay> = driver
             .displays()
             .into_iter()
-            .map(VirtualDisplay::new_host)
+            .map(|d| {
+                let virtual_pos = Position(d.x, d.y);
+                VirtualDisplay::new_host(d, virtual_pos)
+            })
             .collect();
 
         let Some(first) = displays.first() else {
@@ -39,9 +42,63 @@ impl DisplayManager {
     }
 
     pub fn add(&mut self, display: Display, position: DisplayPosition) {
-        // todo: calculate virtual position
-        println!("added display {display:#?} @ {position:?}");
-        self.displays.push(VirtualDisplay::new_client(display));
+        let Some(reference) = self.displays.iter().min_by_key(|d| match position {
+            DisplayPosition::Left | DisplayPosition::TopLeft | DisplayPosition::BottomLeft => {
+                d.display.x
+            }
+
+            DisplayPosition::Right | DisplayPosition::TopRight | DisplayPosition::BottomRight => {
+                -(d.display.x + d.display.width)
+            }
+
+            DisplayPosition::Top => d.display.y,
+            DisplayPosition::Bottom => -(d.display.y + d.display.height),
+        }) else {
+            return;
+        };
+
+        let pos = match position {
+            DisplayPosition::Left => {
+                Position(reference.display.x - display.width, reference.display.y)
+            }
+
+            DisplayPosition::TopLeft => Position(
+                reference.display.x - display.width,
+                reference.display.y - display.height,
+            ),
+
+            DisplayPosition::Top => {
+                Position(reference.display.x, reference.display.y - display.height)
+            }
+
+            DisplayPosition::TopRight => Position(
+                reference.display.x + reference.display.width,
+                reference.display.y - display.height,
+            ),
+
+            DisplayPosition::Right => Position(
+                reference.display.x + reference.display.width,
+                reference.display.y,
+            ),
+
+            DisplayPosition::BottomRight => Position(
+                reference.display.x + reference.display.width,
+                reference.display.y + reference.display.height,
+            ),
+
+            DisplayPosition::Bottom => Position(
+                reference.display.x,
+                reference.display.y + reference.display.height,
+            ),
+
+            DisplayPosition::BottomLeft => Position(
+                reference.display.x - display.width,
+                reference.display.y + reference.display.height,
+            ),
+        };
+
+        println!("added display {display:#?} @ {pos:?}");
+        self.displays.push(VirtualDisplay::new_client(display, pos));
     }
 
     pub fn remove_displays(&mut self, addr: SocketAddr) {
@@ -60,25 +117,35 @@ impl DisplayManager {
     pub fn set_physical_position(&mut self, x: i64, y: i64) {
         self.physical_cursor = Position(x, y);
         self.virtual_cursor = Position(x, y);
-
-        println!("phys: {:?}", self.physical_cursor);
     }
 
-    pub fn update_virtual_position(&mut self, dx: i64, dy: i64) {
+    pub fn update_virtual_position(&mut self, dx: i64, dy: i64) -> Option<Position> {
+        let prev_display_id = self.current_display.clone();
         self.virtual_cursor.add((dx, dy));
+        self.current_display = self.get_current_display().unwrap().display.id.clone();
 
-        if let Some(v) = self.get_current_display() {
-            if v.display.id != self.current_display {
-                if !v.is_host {
-                    println!("lock host");
-                } else {
-                    println!("unlock host");
-                }
+        let is_same_display = self.current_display == prev_display_id;
+        let v = self.get_current_display().unwrap();
+        if !v.is_host {
+            if !is_same_display {
+                println!("lock host");
             }
-            self.current_display = v.display.id.clone();
+            return Some(self.get_phys_position(v, self.virtual_cursor.clone()));
+        } else {
+            println!("unlock host");
         }
+        None
+    }
 
-        println!("virt: {:?}", self.virtual_cursor);
+    pub fn get_phys_position(
+        &self,
+        display: &VirtualDisplay,
+        virtual_position: Position,
+    ) -> Position {
+        Position(
+            display.display.x + virtual_position.0 - display.virtual_position.0,
+            display.display.y + virtual_position.1 - display.virtual_position.1,
+        )
     }
 
     fn get_current_display(&self) -> Option<&VirtualDisplay> {
@@ -107,19 +174,22 @@ impl DisplayManager {
 pub struct VirtualDisplay {
     pub is_host: bool,
     pub display: Display,
+    pub virtual_position: Position,
 }
 
 impl VirtualDisplay {
-    pub fn new_host(display: Display) -> Self {
+    pub fn new_host(display: Display, virtual_position: Position) -> Self {
         Self {
             is_host: true,
             display,
+            virtual_position,
         }
     }
-    pub fn new_client(display: Display) -> Self {
+    pub fn new_client(display: Display, virtual_position: Position) -> Self {
         Self {
             is_host: false,
             display,
+            virtual_position,
         }
     }
 }

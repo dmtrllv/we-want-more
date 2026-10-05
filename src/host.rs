@@ -43,7 +43,17 @@ pub async fn start_host(port: u32) -> Result<(), String> {
                         dm.set_physical_position(x, y);
                     }
                     Some(PlatformEvent::Move(Position(x, y))) => {
-                        dm.update_virtual_position(x, y);
+                        if let Some(client_pos) = dm.update_virtual_position(x, y) {
+                            let a = dm.current_display.clone().0;
+                            let (addr, _) = a.split_once("/").unwrap();
+                            
+                            for (k, sender) in &socket_emitters {
+                                if k.ip().to_string() == addr {
+                                    let _ = sender.send(PlatformEvent::Position(client_pos));
+                                    break;
+                                }
+                            }
+                        }
                     }
                     Some(PlatformEvent::InitClient(display, position)) => {
                         dm.add(display, position);
